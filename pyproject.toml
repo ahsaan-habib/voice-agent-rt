@@ -1,0 +1,18 @@
+[project]
+name = "voice-agent-rt"
+version = "0.1.0"
+description = "Real-time voice agent over WebSockets: VAD -> ASR -> RAG -> LLM -> TTS, with a latency budget and fallbacks"
+requires-python = ">=3.10"
+dependencies = [
+    "fastapi>=0.111",
+    "uvicorn[standard]>=0.30",
+    "httpx>=0.27",
+    "numpy>=1.26",
+]
+
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+include = ["voice*"]
