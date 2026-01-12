@@ -9,6 +9,7 @@ from .asr import Signal, Utterances, Whisper
 from .events import SAMPLE_RATE_IN, Session
 from .llm import OllamaStream
 from .retrieval import Retriever
+from .tts import PiperTTS
 from .turn import Turn
 
 app = FastAPI(title="voice-agent-rt")
@@ -20,6 +21,7 @@ def load_models() -> None:
     deps["whisper"] = Whisper()
     deps["retriever"] = Retriever()
     deps["llm"] = OllamaStream()
+    deps["tts"] = PiperTTS()
 
 
 @app.websocket("/ws")
@@ -30,7 +32,8 @@ async def ws_endpoint(ws: WebSocket) -> None:
     session = Session(ws)
     utt = Utterances()
     partial_task: asyncio.Task | None = None
-    await session.emit("session_started", sample_rate_in=SAMPLE_RATE_IN)
+    await session.emit("session_started", sample_rate_in=SAMPLE_RATE_IN,
+                       sample_rate_out=deps["tts"].sample_rate)
 
     async def partial(pcm: bytes) -> None:
         text = await loop.run_in_executor(None, whisper.transcribe, pcm)
