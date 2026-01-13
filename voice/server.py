@@ -2,8 +2,11 @@ from __future__ import annotations
 
 import asyncio
 import base64
+from pathlib import Path
 
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
+from fastapi.responses import FileResponse
+from fastapi.staticfiles import StaticFiles
 
 from .asr import Signal, Utterances, Whisper
 from .events import SAMPLE_RATE_IN, Session
@@ -12,7 +15,10 @@ from .retrieval import Retriever
 from .tts import PiperTTS
 from .turn import Turn
 
+STATIC = Path(__file__).parent / "static"
+
 app = FastAPI(title="voice-agent-rt")
+app.mount("/static", StaticFiles(directory=STATIC), name="static")
 deps: dict = {}
 
 
@@ -22,6 +28,11 @@ def load_models() -> None:
     deps["retriever"] = Retriever()
     deps["llm"] = OllamaStream()
     deps["tts"] = PiperTTS()
+
+
+@app.get("/")
+def index() -> FileResponse:
+    return FileResponse(STATIC / "index.html")
 
 
 @app.websocket("/ws")

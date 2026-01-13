@@ -1,0 +1,67 @@
+<!doctype html>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>voice-agent-rt</title>
+<style>
+  body { font: 15px system-ui, sans-serif; max-width: 720px; margin: 32px auto; padding: 0 16px; color: #1d2433; }
+  button { font: inherit; padding: 8px 16px; border-radius: 6px; border: 1px solid #c5ccd8; background: #fff; cursor: pointer; }
+  button.on { background: #1d2433; color: #fff; }
+  #partial { color: #8a93a6; min-height: 1.4em; }
+  #log p { margin: 6px 0; }
+  .you { color: #2f6fde; }
+  .meta { color: #8a93a6; font-size: 12px; }
+</style>
+<h1>Ask the docs</h1>
+<button id="mic">Start talking</button>
+<p id="partial"></p>
+<div id="log"></div>
+<script>
+const $ = (id) => document.getElementById(id);
+let ws, ctx, playAt = 0, outRate = 22050, answer = null;
+
+const b64ToInt16 = (b64) => new Int16Array(Uint8Array.from(atob(b64), c => c.charCodeAt(0)).buffer);
+const bufToB64 = (buf) => btoa(String.fromCharCode(...new Uint8Array(buf)));
+
+function line(cls, text) {
+  const p = document.createElement("p");
+  p.className = cls; p.textContent = text;
+  $("log").appendChild(p);
+  return p;
+}
+
+function play(int16) {
+  const buf = ctx.createBuffer(1, int16.length, outRate);
+  const ch = buf.getChannelData(0);
+  for (let i = 0; i < int16.length; i++) ch[i] = int16[i] / 0x8000;
+  const src = ctx.createBufferSource();
+  src.buffer = buf; src.connect(ctx.destination);
+  playAt = Math.max(playAt, ctx.currentTime);
+  src.start(playAt);
+  playAt += buf.duration;
+}
+
+function onEvent(e) {
+  switch (e.type) {
+    case "session_started": outRate = e.sample_rate_out || outRate; break;
+    case "partial_transcript": $("partial").textContent = e.text; break;
+    case "final_transcript": $("partial").textContent = ""; line("you", e.text); answer = line("", ""); break;
+    case "token": if (answer) answer.textContent += e.text; break;
+    case "audio_chunk": play(b64ToInt16(e.pcm)); break;
+    case "turn_complete": if (e.timings) line("meta", JSON.stringify(e.timings)); break;
+    case "error": line("meta", "error: " + e.message); break;
+  }
+}
+
+$("mic").onclick = async () => {
+  if (ws) { ws.close(); ws = null; $("mic").classList.remove("on"); $("mic").textContent = "Start talking"; return; }
+  ctx = new AudioContext();
+  await ctx.audioWorklet.addModule("/static/pcm-worklet.js");
+  const stream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true } });
+  const node = new AudioWorkletNode(ctx, "pcm-worklet");
+  ctx.createMediaStreamSource(stream).connect(node);
+  ws = new WebSocket(`${location.protocol === "https:" ? "wss" : "ws"}://${location.host}/ws`);
+  ws.onmessage = (m) => onEvent(JSON.parse(m.data));
+  node.port.onmessage = (m) => { if (ws?.readyState === 1) ws.send(JSON.stringify({ type: "audio", pcm: bufToB64(m.data) })); };
+  $("mic").classList.add("on"); $("mic").textContent = "Stop";
+};
+</script>
