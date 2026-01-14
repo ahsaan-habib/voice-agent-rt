@@ -6,10 +6,13 @@ import asyncio
 from .events import Session
 from .llm import OllamaStream
 from .retrieval import Retriever
+from .timing import TurnTimer
 
 
 class Turn:
-    def __init__(self, session: Session, retriever: Retriever, llm: OllamaStream, tts=None):
+    def __init__(self, session: Session, retriever: Retriever, llm: OllamaStream, tts=None,
+                 timer: TurnTimer | None = None):
+        self.timer = timer or TurnTimer()
         self.session = session
         self.retriever = retriever
         self.llm = llm
@@ -17,13 +20,23 @@ class Turn:
 
     async def run(self, text: str) -> None:
         loop = asyncio.get_running_loop()
+        tm = self.timer
+        tm.start("retrieval")
         ranked = await loop.run_in_executor(None, self.retriever.search, text)
+        tm.end("retrieval")
         chunks = [c for c, _ in ranked]
         answer = []
+        tm.start("llm")
         async for token in self.llm.stream(text, chunks):
+            tm.mark("first_token")
             answer.append(token)
             await self.session.emit("token", text=token)
+        tm.end("llm")
         if self.tts:
+            tm.start("tts")
             pcm = await loop.run_in_executor(None, self.tts.synth, "".join(answer))
+            tm.end("tts")
             await self.session.send_audio(pcm)
-        await self.session.emit("turn_complete")
+            tm.mark("first_audio")
+        tm.save(text=text)
+        await self.session.emit("turn_complete", timings=tm.summary())
