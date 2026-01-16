@@ -5,7 +5,7 @@ import asyncio
 
 from .events import Session
 from .llm import OllamaStream
-from .retrieval import Retriever
+from .retrieval import Prefetch, Retriever
 from .timing import TurnTimer
 
 
@@ -18,11 +18,14 @@ class Turn:
         self.llm = llm
         self.tts = tts
 
-    async def run(self, text: str) -> None:
+    async def run(self, text: str, prefetch: Prefetch | None = None) -> None:
         loop = asyncio.get_running_loop()
         tm = self.timer
         tm.start("retrieval")
-        ranked = await loop.run_in_executor(None, self.retriever.search, text)
+        if prefetch:
+            ranked, reused = await prefetch.take(text)
+        else:
+            ranked, reused = await loop.run_in_executor(None, self.retriever.search, text), False
         tm.end("retrieval")
         chunks = [c for c, _ in ranked]
         answer = []
@@ -38,5 +41,5 @@ class Turn:
             tm.end("tts")
             await self.session.send_audio(pcm)
             tm.mark("first_audio")
-        tm.save(text=text)
+        tm.save(text=text, retrieval_reused=reused)
         await self.session.emit("turn_complete", timings=tm.summary())

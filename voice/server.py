@@ -12,7 +12,7 @@ from fastapi.staticfiles import StaticFiles
 from .asr import Signal, Utterances, Whisper
 from .events import SAMPLE_RATE_IN, Session
 from .llm import OllamaStream
-from .retrieval import Retriever
+from .retrieval import Prefetch, Retriever
 from .timing import TurnTimer
 from .tts import PiperTTS
 from .turn import Turn
@@ -44,6 +44,7 @@ async def ws_endpoint(ws: WebSocket) -> None:
     whisper = deps["whisper"]
     session = Session(ws)
     utt = Utterances()
+    prefetch = Prefetch(deps["retriever"])
     partial_task: asyncio.Task | None = None
     await session.emit("session_started", sample_rate_in=SAMPLE_RATE_IN,
                        sample_rate_out=deps["tts"].sample_rate)
@@ -52,6 +53,7 @@ async def ws_endpoint(ws: WebSocket) -> None:
         text = await loop.run_in_executor(None, whisper.transcribe, pcm)
         if text:
             await session.emit("partial_transcript", text=text)
+            prefetch.on_partial(text)
 
     try:
         while True:
