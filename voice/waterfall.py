@@ -10,7 +10,7 @@ import json
 
 from .timing import TURNS_LOG
 
-ORDER = ["asr_final", "retrieval", "llm", "tts"]
+ORDER = ["asr_final", "retrieval", "llm", "tts_0", "tts_1", "tts_2"]
 WIDTH = 60
 
 
@@ -54,7 +54,7 @@ def main() -> None:
             d = [s[name][1] - s[name][0] for s in (t["spans"] for t in turns) if name in s and s[name][1]]
             if d:
                 print(f"  {name:<14}{pct(d, .5):8.0f}{pct(d, .95):8.0f}")
-        for mark in ("first_token", "first_audio"):
+        for mark in ("first_token", "first_sentence", "first_audio"):
             v = [t["marks"][mark] for t in turns if mark in t["marks"]]
             if v:
                 print(f"  {mark:<14}{pct(v, .5):8.0f}{pct(v, .95):8.0f}   (from speech end)")

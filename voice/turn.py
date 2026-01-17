@@ -6,6 +6,7 @@ import asyncio
 from .events import Session
 from .llm import OllamaStream
 from .retrieval import Prefetch, Retriever
+from .text import pop_sentence
 from .timing import TurnTimer
 
 
@@ -28,18 +29,40 @@ class Turn:
             ranked, reused = await loop.run_in_executor(None, self.retriever.search, text), False
         tm.end("retrieval")
         chunks = [c for c, _ in ranked]
-        answer = []
+
+        # Speak sentence one while the model is still writing sentence two:
+        # the tail of generation drops out of perceived latency.
+        sentences: asyncio.Queue[str | None] = asyncio.Queue()
+        speaker = asyncio.create_task(self._speak(sentences)) if self.tts else None
+
+        buf = ""
         tm.start("llm")
         async for token in self.llm.stream(text, chunks):
             tm.mark("first_token")
-            answer.append(token)
             await self.session.emit("token", text=token)
+            buf += token
+            sentence, buf = pop_sentence(buf)
+            if sentence:
+                tm.mark("first_sentence")
+                await sentences.put(sentence)
         tm.end("llm")
-        if self.tts:
-            tm.start("tts")
-            pcm = await loop.run_in_executor(None, self.tts.synth, "".join(answer))
-            tm.end("tts")
-            await self.session.send_audio(pcm)
-            tm.mark("first_audio")
+        if buf.strip():
+            await sentences.put(buf.strip())
+        await sentences.put(None)
+        if speaker:
+            await speaker
         tm.save(text=text, retrieval_reused=reused)
         await self.session.emit("turn_complete", timings=tm.summary())
+
+    async def _speak(self, sentences: "asyncio.Queue[str | None]") -> None:
+        loop = asyncio.get_running_loop()
+        tm = self.timer
+        n = 0
+        while (sentence := await sentences.get()) is not None:
+            name = f"tts_{n}"
+            tm.start(name)
+            pcm = await loop.run_in_executor(None, self.tts.synth, sentence)
+            tm.end(name)
+            await self.session.send_audio(pcm)
+            tm.mark("first_audio")
+            n += 1
