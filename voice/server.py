@@ -28,6 +28,7 @@ deps: dict = {}
 def load_models() -> None:
     deps["whisper"] = Whisper()
     deps["retriever"] = Retriever()
+    deps["retriever"].warm()
     deps["llm"] = OllamaStream()
     deps["tts"] = PiperTTS()
 

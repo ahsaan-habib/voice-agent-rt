@@ -11,10 +11,17 @@ from rag_grounded.retrieval.rerank import Reranker
 
 
 class Retriever:
-    def __init__(self, top_k: int = 4):
-        self.hybrid = HybridRetriever()
+    def __init__(self, top_k: int = 4, candidates: int = 20):
+        # 20 candidates instead of rag-grounded's 30: ~fewer cross-encoder pairs,
+        # golden-set recall moved 0.89 -> 0.88 for it
+        self.hybrid = HybridRetriever(candidates=candidates)
         self.reranker = Reranker()
         self.top_k = top_k
+
+    def warm(self) -> None:
+        """A cold cross-encoder adds ~600 ms to the first request after idle —
+        the request a person is most likely judging. Load and run it now."""
+        self.search("how do I install laravel")
 
     def search(self, query: str) -> list[tuple[Chunk, float]]:
         candidates = self.hybrid.vectors.get(self.hybrid.retrieve(query))
