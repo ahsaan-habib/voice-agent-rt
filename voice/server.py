@@ -13,6 +13,7 @@ from .asr import Signal, Utterances, Whisper
 from .events import SAMPLE_RATE_IN, Session
 from .llm import OllamaStream
 from .retrieval import Prefetch, Retriever
+from .speculate import SpeculativeLLM
 from .timing import TurnTimer
 from .tts import PiperTTS
 from .turn import Turn
@@ -46,6 +47,8 @@ async def ws_endpoint(ws: WebSocket) -> None:
     session = Session(ws)
     utt = Utterances()
     prefetch = Prefetch(deps["retriever"])
+    speculative = SpeculativeLLM(deps["llm"])
+    prefetch.on_result = lambda text, ranked: speculative.start(text, [c for c, _ in ranked])
     partial_task: asyncio.Task | None = None
     await session.emit("session_started", sample_rate_in=SAMPLE_RATE_IN,
                        sample_rate_out=deps["tts"].sample_rate)
