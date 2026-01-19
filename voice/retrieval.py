@@ -45,7 +45,6 @@ class Prefetch:
         self.text: str | None = None
         self.task: asyncio.Task | None = None
         self.wasted = 0
-        self.on_result = None   # (text, ranked) -> None, used to speculate generation
 
     def on_partial(self, text: str) -> None:
         if len(text.split()) < self.min_words or _norm(text) == _norm(self.text or ""):
@@ -56,9 +55,6 @@ class Prefetch:
         loop = asyncio.get_running_loop()
         self.text = text
         self.task = asyncio.ensure_future(loop.run_in_executor(None, self.retriever.search, text))
-        if self.on_result:
-            self.task.add_done_callback(
-                lambda t, text=text: t.cancelled() or t.exception() or self.on_result(text, t.result()))
 
     async def take(self, final: str):
         """(ranked, reused) for the final transcript."""

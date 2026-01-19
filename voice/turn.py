@@ -6,7 +6,6 @@ import asyncio
 from .events import Session
 from .llm import OllamaStream
 from .retrieval import Prefetch, Retriever
-from .speculate import SpeculativeLLM
 from .text import pop_sentence
 from .timing import TurnTimer
 
@@ -20,8 +19,7 @@ class Turn:
         self.llm = llm
         self.tts = tts
 
-    async def run(self, text: str, prefetch: Prefetch | None = None,
-                  speculative: SpeculativeLLM | None = None) -> None:
+    async def run(self, text: str, prefetch: Prefetch | None = None) -> None:
         loop = asyncio.get_running_loop()
         tm = self.timer
         tm.start("retrieval")
@@ -39,8 +37,7 @@ class Turn:
 
         buf = ""
         tm.start("llm")
-        stream = (await speculative.take(text) if speculative else None) or self.llm.stream(text, chunks)
-        async for token in stream:
+        async for token in self.llm.stream(text, chunks):
             tm.mark("first_token")
             await self.session.emit("token", text=token)
             buf += token
