@@ -11,7 +11,7 @@ from fastapi.staticfiles import StaticFiles
 
 from .asr import Signal, Utterances, Whisper
 from .events import SAMPLE_RATE_IN, Session
-from .llm import OllamaStream
+from .resilience import ResilientLLM
 from .retrieval import Prefetch, Retriever
 from .timing import TurnTimer
 from .tts import PiperTTS
@@ -29,7 +29,7 @@ def load_models() -> None:
     deps["whisper"] = Whisper()
     deps["retriever"] = Retriever()
     deps["retriever"].warm()
-    deps["llm"] = OllamaStream()
+    deps["llm"] = ResilientLLM()
     deps["tts"] = PiperTTS()
 
 

@@ -4,14 +4,14 @@ from __future__ import annotations
 import asyncio
 
 from .events import Session
-from .llm import OllamaStream
+from .resilience import ResilientLLM
 from .retrieval import Prefetch, Retriever
 from .text import pop_sentence
 from .timing import TurnTimer
 
 
 class Turn:
-    def __init__(self, session: Session, retriever: Retriever, llm: OllamaStream, tts=None,
+    def __init__(self, session: Session, retriever: Retriever, llm: ResilientLLM, tts=None,
                  timer: TurnTimer | None = None):
         self.timer = timer or TurnTimer()
         self.session = session
@@ -37,7 +37,7 @@ class Turn:
 
         buf = ""
         tm.start("llm")
-        async for token in self.llm.stream(text, chunks):
+        async for token in self.llm.stream(text, chunks, self.session.emit):
             tm.mark("first_token")
             await self.session.emit("token", text=token)
             buf += token
