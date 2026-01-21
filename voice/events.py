@@ -12,6 +12,8 @@ server -> client
   final_transcript  {text}
   token             {text}
   audio_chunk       {pcm: <base64 s16le>}
+  degraded          {stage, reason}       a fallback is in use — the client shows it
+  notice            {text}                something the agent says about itself
   turn_complete     {timings}
   error             {message}
 """
@@ -33,6 +35,14 @@ class Session:
         self.ws = ws
         self.started = time.perf_counter()
         self.recorder = recorder
+        self.tts_down_until = 0.0
+        self.asr_down_until = 0.0
+
+    def tts_ok(self) -> bool:
+        return time.monotonic() >= self.tts_down_until
+
+    def asr_ok(self) -> bool:
+        return time.monotonic() >= self.asr_down_until
 
     async def emit(self, type_: str, **data: Any) -> None:
         msg = {"type": type_, "t": round((time.perf_counter() - self.started) * 1000, 1), **data}

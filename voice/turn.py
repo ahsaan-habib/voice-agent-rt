@@ -2,12 +2,18 @@
 from __future__ import annotations
 
 import asyncio
+import logging
+import time
 
+from . import config
 from .events import Session
 from .resilience import ResilientLLM
 from .retrieval import Prefetch, Retriever
 from .text import pop_sentence
 from .timing import TurnTimer
+
+log = logging.getLogger(__name__)
+TTS_RETRY_AFTER_S = 60
 
 
 class Turn:
@@ -33,7 +39,7 @@ class Turn:
         # Speak sentence one while the model is still writing sentence two:
         # the tail of generation drops out of perceived latency.
         sentences: asyncio.Queue[str | None] = asyncio.Queue()
-        speaker = asyncio.create_task(self._speak(sentences)) if self.tts else None
+        speaker = asyncio.create_task(self._speak(sentences)) if self.tts and self.session.tts_ok() else None
 
         buf = ""
         tm.start("llm")
@@ -61,8 +67,32 @@ class Turn:
         while (sentence := await sentences.get()) is not None:
             name = f"tts_{n}"
             tm.start(name)
-            pcm = await loop.run_in_executor(None, self.tts.synth, sentence)
+            try:
+                pcm = await asyncio.wait_for(loop.run_in_executor(None, self.tts.synth, sentence),
+                                             config.TTS_TIMEOUT_S)
+            except Exception as e:  # timeout or a broken voice: the answer is already on screen
+                tm.end(name)
+                log.warning("tts.down reason=%s", type(e).__name__)
+                self.session.tts_down_until = time.monotonic() + TTS_RETRY_AFTER_S
+                await self.session.emit("degraded", stage="tts", reason=type(e).__name__)
+                while await sentences.get() is not None:   # drain, keep the producer unblocked
+                    pass
+                return
             tm.end(name)
             await self.session.send_audio(pcm)
             tm.mark("first_audio")
             n += 1
+
+
+async def say(session: Session, tts, text: str) -> None:
+    """Something the agent says about itself (fallbacks, refusals). Spoken if
+    TTS works, always shown."""
+    await session.emit("notice", text=text)
+    if tts and session.tts_ok():
+        loop = asyncio.get_running_loop()
+        try:
+            pcm = await asyncio.wait_for(loop.run_in_executor(None, tts.synth, text), config.TTS_TIMEOUT_S)
+            await session.send_audio(pcm)
+        except Exception:
+            session.tts_down_until = time.monotonic() + TTS_RETRY_AFTER_S
+            await session.emit("degraded", stage="tts", reason="notice")

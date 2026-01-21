@@ -15,7 +15,8 @@ from .resilience import ResilientLLM
 from .retrieval import Prefetch, Retriever
 from .timing import TurnTimer
 from .tts import PiperTTS
-from .turn import Turn
+from . import config
+from .turn import Turn, say
 
 STATIC = Path(__file__).parent / "static"
 
@@ -51,27 +52,52 @@ async def ws_endpoint(ws: WebSocket) -> None:
                        sample_rate_out=deps["tts"].sample_rate)
 
     async def partial(pcm: bytes) -> None:
-        text = await loop.run_in_executor(None, whisper.transcribe, pcm)
+        try:
+            text = await asyncio.wait_for(loop.run_in_executor(None, whisper.transcribe, pcm),
+                                          config.ASR_TIMEOUT_S)
+        except Exception:
+            return   # the final transcription decides whether ASR is down
         if text:
             await session.emit("partial_transcript", text=text)
             prefetch.on_partial(text)
 
+    async def asr_down(reason: str) -> None:
+        session.asr_down_until = time.monotonic() + 30
+        utt.reset()
+        await session.emit("degraded", stage="asr", reason=reason, fallback="typed_input")
+        await say(session, deps["tts"], "I'm having trouble hearing you. You can type your question instead.")
+
+    async def turn(text: str, timer: TurnTimer) -> None:
+        await Turn(session, deps["retriever"], deps["llm"], deps.get("tts"), timer).run(text, prefetch)
+
     try:
         while True:
             msg = await ws.receive_json()
-            if msg["type"] == "audio":
+            if msg["type"] == "text_input":
+                text = msg.get("text", "").strip()
+                if text:
+                    await session.emit("final_transcript", text=text, source="typed")
+                    await turn(text, TurnTimer())
+            elif msg["type"] == "audio":
+                if not session.asr_ok():
+                    continue
                 signal = utt.push(base64.b64decode(msg["pcm"]))
                 if signal is Signal.PARTIAL_DUE and (partial_task is None or partial_task.done()):
                     partial_task = asyncio.create_task(partial(utt.audio()))
                 elif signal is Signal.END:
                     timer = TurnTimer(speech_end=time.perf_counter())
                     timer.start("asr_final")
-                    text = await loop.run_in_executor(None, whisper.transcribe, utt.audio())
+                    try:
+                        text = await asyncio.wait_for(
+                            loop.run_in_executor(None, whisper.transcribe, utt.audio()), config.ASR_TIMEOUT_S)
+                    except Exception as e:
+                        await asr_down(type(e).__name__)
+                        continue
                     timer.end("asr_final")
                     utt.reset()
                     await session.emit("final_transcript", text=text)
                     if text:
-                        await Turn(session, deps["retriever"], deps["llm"], deps.get("tts"), timer).run(text)
+                        await turn(text, timer)
             elif msg["type"] == "end_session":
                 break
     except WebSocketDisconnect:

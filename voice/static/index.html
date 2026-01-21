@@ -10,11 +10,16 @@
   #log p { margin: 6px 0; }
   .you { color: #2f6fde; }
   .meta { color: #8a93a6; font-size: 12px; }
+  .notice { color: #a05a00; }
+  #degraded { display: inline-block; margin-left: 10px; font-size: 12px; padding: 2px 8px; border-radius: 10px; background: #fff3e0; color: #a05a00; }
+  form { margin-top: 16px; display: flex; gap: 8px; }
+  form input { flex: 1; font: inherit; padding: 8px; border: 1px solid #c5ccd8; border-radius: 6px; }
 </style>
 <h1>Ask the docs</h1>
-<button id="mic">Start talking</button>
+<button id="mic">Start talking</button><span id="degraded" hidden></span>
 <p id="partial"></p>
 <div id="log"></div>
+<form id="typed"><input id="q" placeholder="…or type a question" autocomplete="off"><button>Ask</button></form>
 <script>
 const $ = (id) => document.getElementById(id);
 let ws, ctx, playAt = 0, outRate = 22050, answer = null;
@@ -48,9 +53,21 @@ function onEvent(e) {
     case "token": if (answer) answer.textContent += e.text; break;
     case "audio_chunk": play(b64ToInt16(e.pcm)); break;
     case "turn_complete": if (e.timings) line("meta", JSON.stringify(e.timings)); break;
+    case "notice": line("notice", e.text); break;
+    case "degraded":
+      $("degraded").hidden = false;
+      $("degraded").textContent = { asr: "can't hear you — type instead", llm: "using backup model", tts: "voice off — text only" }[e.stage] || "degraded";
+      if (e.stage === "asr") $("q").focus();
+      break;
     case "error": line("meta", "error: " + e.message); break;
   }
 }
+
+$("typed").onsubmit = (ev) => {
+  ev.preventDefault();
+  const text = $("q").value.trim();
+  if (text && ws?.readyState === 1) { ws.send(JSON.stringify({ type: "text_input", text })); $("q").value = ""; }
+};
 
 $("mic").onclick = async () => {
   if (ws) { ws.close(); ws = null; $("mic").classList.remove("on"); $("mic").textContent = "Start talking"; return; }
