@@ -28,3 +28,6 @@ LLM_STALL_S = float(env("LLM_STALL_S", "3.0"))       # max gap between tokens
 ASR_TIMEOUT_S = float(env("ASR_TIMEOUT_S", "3.0"))
 TTS_TIMEOUT_S = float(env("TTS_TIMEOUT_S", "5.0"))
 RETRIEVAL_TIMEOUT_S = float(env("RETRIEVAL_TIMEOUT_S", "2.0"))
+
+# bge-reranker logits; below this nothing retrieved is about the question
+RETRIEVAL_MIN_SCORE = float(env("RETRIEVAL_MIN_SCORE", "-2.0"))

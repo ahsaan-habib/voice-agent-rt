@@ -29,12 +29,29 @@ class Turn:
         loop = asyncio.get_running_loop()
         tm = self.timer
         tm.start("retrieval")
-        if prefetch:
-            ranked, reused = await prefetch.take(text)
-        else:
-            ranked, reused = await loop.run_in_executor(None, self.retriever.search, text), False
+        try:
+            if prefetch:
+                ranked, reused = await asyncio.wait_for(prefetch.take(text), config.RETRIEVAL_TIMEOUT_S)
+            else:
+                ranked = await asyncio.wait_for(
+                    loop.run_in_executor(None, self.retriever.search, text), config.RETRIEVAL_TIMEOUT_S)
+                reused = False
+        except Exception as e:
+            log.warning("retrieval.failed reason=%s", type(e).__name__)
+            await self.session.emit("degraded", stage="retrieval", reason=type(e).__name__)
+            ranked, reused = [], False
         tm.end("retrieval")
-        chunks = [c for c, _ in ranked]
+        chunks = [c for c, score in ranked if score >= config.RETRIEVAL_MIN_SCORE]
+
+        if not chunks:
+            # nothing to ground an answer in: refuse rather than let the model improvise
+            await self.session.emit("refusal", reason="no_context")
+            await say(self.session, self.tts, "I don't have anything on that in the docs. "
+                                              "Could you try asking it a different way?")
+            tm.mark("first_audio")
+            tm.save(text=text, retrieval_reused=reused, refused=True)
+            await self.session.emit("turn_complete", timings=tm.summary())
+            return
 
         # Speak sentence one while the model is still writing sentence two:
         # the tail of generation drops out of perceived latency.

@@ -14,6 +14,7 @@ server -> client
   audio_chunk       {pcm: <base64 s16le>}
   degraded          {stage, reason}       a fallback is in use — the client shows it
   notice            {text}                something the agent says about itself
+  refusal           {reason}              nothing retrieved to ground an answer
   turn_complete     {timings}
   error             {message}
 """
