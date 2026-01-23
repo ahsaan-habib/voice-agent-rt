@@ -11,6 +11,7 @@ from fastapi.staticfiles import StaticFiles
 
 from .asr import Signal, Utterances, Whisper
 from .events import SAMPLE_RATE_IN, Session
+from .recorder import ENABLED as RECORDING, Recorder
 from .resilience import ResilientLLM
 from .retrieval import Prefetch, Retriever
 from .timing import TurnTimer
@@ -44,12 +45,14 @@ async def ws_endpoint(ws: WebSocket) -> None:
     await ws.accept()
     loop = asyncio.get_running_loop()
     whisper = deps["whisper"]
-    session = Session(ws)
+    recorder = Recorder(ws.query_params.get("session")) if RECORDING else None
+    session = Session(ws, recorder)
     utt = Utterances()
     prefetch = Prefetch(deps["retriever"])
     partial_task: asyncio.Task | None = None
     await session.emit("session_started", sample_rate_in=SAMPLE_RATE_IN,
-                       sample_rate_out=deps["tts"].sample_rate)
+                       sample_rate_out=deps["tts"].sample_rate,
+                       recording=recorder.id if recorder else None)
 
     async def partial(pcm: bytes) -> None:
         try:
@@ -75,13 +78,18 @@ async def ws_endpoint(ws: WebSocket) -> None:
             msg = await ws.receive_json()
             if msg["type"] == "text_input":
                 text = msg.get("text", "").strip()
+                if recorder:
+                    recorder.text(text)
                 if text:
                     await session.emit("final_transcript", text=text, source="typed")
                     await turn(text, TurnTimer())
             elif msg["type"] == "audio":
+                pcm = base64.b64decode(msg["pcm"])
+                if recorder:
+                    recorder.audio_frame(pcm)
                 if not session.asr_ok():
                     continue
-                signal = utt.push(base64.b64decode(msg["pcm"]))
+                signal = utt.push(pcm)
                 if signal is Signal.PARTIAL_DUE and (partial_task is None or partial_task.done()):
                     partial_task = asyncio.create_task(partial(utt.audio()))
                 elif signal is Signal.END:
@@ -102,3 +110,6 @@ async def ws_endpoint(ws: WebSocket) -> None:
                 break
     except WebSocketDisconnect:
         pass
+    finally:
+        if recorder:
+            recorder.close()
