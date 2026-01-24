@@ -38,7 +38,7 @@ class OllamaStream:
             "stream": True,
             "think": False,
             "keep_alive": "30m",   # same reason as the warm reranker: no cold model mid-conversation
-            "options": {"temperature": 0.0, "num_predict": self.num_predict},
+            "options": {"temperature": 0.0, "seed": config.LLM_SEED, "num_predict": self.num_predict},
         }
         async with self.http.stream("POST", "/api/chat", json=body) as r:
             r.raise_for_status()

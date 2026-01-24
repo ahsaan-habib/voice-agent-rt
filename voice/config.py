@@ -31,3 +31,5 @@ RETRIEVAL_TIMEOUT_S = float(env("RETRIEVAL_TIMEOUT_S", "2.0"))
 
 # bge-reranker logits; below this nothing retrieved is about the question
 RETRIEVAL_MIN_SCORE = float(env("RETRIEVAL_MIN_SCORE", "-2.0"))
+# fixed seed so replayed sessions produce the same answers
+LLM_SEED = int(env("LLM_SEED", "7"))
