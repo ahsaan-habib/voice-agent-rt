@@ -18,8 +18,9 @@ speaking" goes) and **what happens when a component fails** (never silence).
 
 ## Protocol
 
-One WebSocket, typed JSON events (see `voice/events.py`): `partial_transcript`,
-`final_transcript`, `token`, `audio_chunk`, `degraded`, `notice`, `refusal`,
+One WebSocket. Audio is binary frames both ways (raw s16le); everything else
+is typed JSON events (see `voice/events.py`): `partial_transcript`,
+`final_transcript`, `token`, `degraded`, `notice`, `refusal`,
 `turn_complete {timings}`. Every optimisation below is a rearrangement of when
 these fire.
 
@@ -49,6 +50,8 @@ What changed the shape (each is one commit):
    sentence two, so generation's tail leaves the perceived latency.
 3. **Warm the reranker** at startup, and rerank 20 candidates instead of 30.
    A cold cross-encoder penalises exactly the first request after idle.
+4. **Binary audio frames** instead of base64 inside JSON. Less pleasant to
+   read in devtools, less work on every 20 ms frame.
 
 And one that was reverted: starting *generation* on the partial transcript.
 It cut p50 a little but wasted tokens on every mismatched partial and could

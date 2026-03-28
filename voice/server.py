@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import asyncio
-import base64
+import json
 import time
 from pathlib import Path
 
@@ -75,7 +75,13 @@ async def ws_endpoint(ws: WebSocket) -> None:
 
     try:
         while True:
-            msg = await ws.receive_json()
+            frame = await ws.receive()
+            if frame["type"] == "websocket.disconnect":
+                break
+            if frame.get("bytes") is not None:
+                msg = {"type": "audio", "pcm": frame["bytes"]}
+            else:
+                msg = json.loads(frame["text"])
             if msg["type"] == "text_input":
                 text = msg.get("text", "").strip()
                 if recorder:
@@ -84,7 +90,7 @@ async def ws_endpoint(ws: WebSocket) -> None:
                     await session.emit("final_transcript", text=text, source="typed")
                     await turn(text, TurnTimer())
             elif msg["type"] == "audio":
-                pcm = base64.b64decode(msg["pcm"])
+                pcm = msg["pcm"]
                 if recorder:
                     recorder.audio_frame(pcm)
                 if not session.asr_ok():

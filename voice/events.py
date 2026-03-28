@@ -1,17 +1,21 @@
 """The socket protocol. Every later optimisation is a rearrangement of when
 these fire, so this is the part to get right first.
 
+Audio travels as binary frames in both directions (raw s16le mono); every
+other message is a JSON text frame. Base64-in-JSON cost ~33% more bytes plus
+encode/decode on every 20 ms frame.
+
 client -> server
-  {"type": "audio", "pcm": <base64 s16le 16 kHz mono, 20 ms>}
+  <binary>          20 ms of s16le 16 kHz mono mic audio
   {"type": "text_input", "text": "..."}          typed fallback
   {"type": "end_session"}
 
 server -> client
+  <binary>          TTS audio, s16le mono at sample_rate_out
   session_started   {sample_rate_in, sample_rate_out}
   partial_transcript{text}
   final_transcript  {text}
   token             {text}
-  audio_chunk       {pcm: <base64 s16le>}
   degraded          {stage, reason}       a fallback is in use — the client shows it
   notice            {text}                something the agent says about itself
   refusal           {reason}              nothing retrieved to ground an answer
@@ -20,7 +24,6 @@ server -> client
 """
 from __future__ import annotations
 
-import base64
 import time
 from typing import Any
 
@@ -52,4 +55,7 @@ class Session:
         await self.ws.send_json(msg)
 
     async def send_audio(self, pcm: bytes) -> None:
-        await self.emit("audio_chunk", pcm=base64.b64encode(pcm).decode())
+        if self.recorder:
+            self.recorder.event({"type": "audio_out", "t": round((time.perf_counter() - self.started) * 1000, 1),
+                                 "bytes": len(pcm)})
+        await self.ws.send_bytes(pcm)

@@ -42,8 +42,6 @@ class Recorder:
         self.inbound.write(json.dumps({"t": self._t(), "kind": "text", "text": text}) + "\n")
 
     def event(self, msg: dict) -> None:
-        if msg.get("type") == "audio_chunk":
-            msg = {**msg, "pcm": f"<{len(msg.get('pcm', ''))} b64 chars>"}   # keep events.jsonl readable
         self.events.write(json.dumps(msg) + "\n")
 
     def close(self) -> None:

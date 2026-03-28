@@ -24,8 +24,6 @@
 const $ = (id) => document.getElementById(id);
 let ws, ctx, playAt = 0, outRate = 22050, answer = null;
 
-const b64ToInt16 = (b64) => new Int16Array(Uint8Array.from(atob(b64), c => c.charCodeAt(0)).buffer);
-const bufToB64 = (buf) => btoa(String.fromCharCode(...new Uint8Array(buf)));
 
 function line(cls, text) {
   const p = document.createElement("p");
@@ -51,7 +49,6 @@ function onEvent(e) {
     case "partial_transcript": $("partial").textContent = e.text; break;
     case "final_transcript": $("partial").textContent = ""; line("you", e.text); answer = line("", ""); break;
     case "token": if (answer) answer.textContent += e.text; break;
-    case "audio_chunk": play(b64ToInt16(e.pcm)); break;
     case "turn_complete": if (e.timings) line("meta", JSON.stringify(e.timings)); break;
     case "notice": line("notice", e.text); break;
     case "degraded":
@@ -77,8 +74,9 @@ $("mic").onclick = async () => {
   const node = new AudioWorkletNode(ctx, "pcm-worklet");
   ctx.createMediaStreamSource(stream).connect(node);
   ws = new WebSocket(`${location.protocol === "https:" ? "wss" : "ws"}://${location.host}/ws`);
-  ws.onmessage = (m) => onEvent(JSON.parse(m.data));
-  node.port.onmessage = (m) => { if (ws?.readyState === 1) ws.send(JSON.stringify({ type: "audio", pcm: bufToB64(m.data) })); };
+  ws.binaryType = "arraybuffer";
+  ws.onmessage = (m) => (m.data instanceof ArrayBuffer ? play(new Int16Array(m.data)) : onEvent(JSON.parse(m.data)));
+  node.port.onmessage = (m) => { if (ws?.readyState === 1) ws.send(m.data); };
   $("mic").classList.add("on"); $("mic").textContent = "Stop";
 };
 </script>

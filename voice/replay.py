@@ -12,7 +12,6 @@ from __future__ import annotations
 
 import argparse
 import asyncio
-import base64
 import json
 from pathlib import Path
 
@@ -51,7 +50,10 @@ async def run(rec: Path, url: str, speed: float) -> list[dict]:
     async with websockets.connect(f"{url}?session=replay-{rec.name}", max_size=None) as ws:
         async def reader():
             async for raw in ws:
-                got.append(json.loads(raw))
+                if isinstance(raw, bytes):
+                    got.append({"type": "audio_out", "bytes": len(raw)})
+                else:
+                    got.append(json.loads(raw))
 
         reader_task = asyncio.create_task(reader())
         last_t = 0.0
@@ -60,7 +62,7 @@ async def run(rec: Path, url: str, speed: float) -> list[dict]:
             last_t = item["t"]
             if item["kind"] == "audio":
                 pcm = audio[item["offset"]: item["offset"] + item["len"]]
-                await ws.send(json.dumps({"type": "audio", "pcm": base64.b64encode(pcm).decode()}))
+                await ws.send(pcm)
             else:
                 await ws.send(json.dumps({"type": "text_input", "text": item["text"]}))
         # let the last turn finish
