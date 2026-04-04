@@ -97,6 +97,8 @@ make serve           # http://localhost:8000
 
 ## Not solved
 
-Barge-in (talking over the agent) isn't handled yet. One language, quiet
-room. Single session — the warm reranker is shared and nothing here has been
+Barge-in is coarse: speech during an answer cancels the turn and the client
+drops queued audio, which can clip a syllable, and it relies on the browser's
+echo cancellation not to trigger on the agent's own voice. One language,
+quiet room. Single session — the warm reranker is shared and nothing here has been
 measured under concurrency.

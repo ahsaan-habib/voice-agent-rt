@@ -22,7 +22,7 @@
 <form id="typed"><input id="q" placeholder="…or type a question" autocomplete="off"><button>Ask</button></form>
 <script>
 const $ = (id) => document.getElementById(id);
-let ws, ctx, playAt = 0, outRate = 22050, answer = null;
+let ws, ctx, playAt = 0, outRate = 22050, answer = null, playing = [];
 
 
 function line(cls, text) {
@@ -41,6 +41,8 @@ function play(int16) {
   playAt = Math.max(playAt, ctx.currentTime);
   src.start(playAt);
   playAt += buf.duration;
+  playing.push(src);
+  src.onended = () => { playing = playing.filter(s => s !== src); };
 }
 
 function onEvent(e) {
@@ -51,6 +53,10 @@ function onEvent(e) {
     case "token": if (answer) answer.textContent += e.text; break;
     case "turn_complete": if (e.timings) line("meta", JSON.stringify(e.timings)); break;
     case "notice": line("notice", e.text); break;
+    case "interrupted":
+      playing.forEach(s => s.stop()); playing = []; playAt = 0;
+      if (answer) answer.textContent += " …";
+      break;
     case "degraded":
       $("degraded").hidden = false;
       $("degraded").textContent = { asr: "can't hear you — type instead", llm: "using backup model", tts: "voice off — text only" }[e.stage] || "degraded";

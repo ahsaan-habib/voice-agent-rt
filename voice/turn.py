@@ -58,6 +58,16 @@ class Turn:
         sentences: asyncio.Queue[str | None] = asyncio.Queue()
         speaker = asyncio.create_task(self._speak(sentences)) if self.tts and self.session.tts_ok() else None
 
+        try:
+            await self._answer(text, chunks, sentences, speaker)
+        finally:
+            if speaker and not speaker.done():
+                speaker.cancel()   # interrupted: don't leave a TTS task waiting on the queue
+        tm.save(text=text, retrieval_reused=reused)
+        await self.session.emit("turn_complete", timings=tm.summary())
+
+    async def _answer(self, text, chunks, sentences, speaker) -> None:
+        tm = self.timer
         buf = ""
         tm.start("llm")
         async for token in self.llm.stream(text, chunks, self.session.emit):
@@ -74,8 +84,6 @@ class Turn:
         await sentences.put(None)
         if speaker:
             await speaker
-        tm.save(text=text, retrieval_reused=reused)
-        await self.session.emit("turn_complete", timings=tm.summary())
 
     async def _speak(self, sentences: "asyncio.Queue[str | None]") -> None:
         loop = asyncio.get_running_loop()

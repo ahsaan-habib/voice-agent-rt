@@ -19,6 +19,7 @@ server -> client
   degraded          {stage, reason}       a fallback is in use — the client shows it
   notice            {text}                something the agent says about itself
   refusal           {reason}              nothing retrieved to ground an answer
+  interrupted       {}                    user spoke over the answer; drop queued audio
   turn_complete     {timings}
   error             {message}
 """

@@ -50,6 +50,7 @@ async def ws_endpoint(ws: WebSocket) -> None:
     utt = Utterances()
     prefetch = Prefetch(deps["retriever"])
     partial_task: asyncio.Task | None = None
+    turn_task: asyncio.Task | None = None
     await session.emit("session_started", sample_rate_in=SAMPLE_RATE_IN,
                        sample_rate_out=deps["tts"].sample_rate,
                        recording=recorder.id if recorder else None)
@@ -70,8 +71,19 @@ async def ws_endpoint(ws: WebSocket) -> None:
         await session.emit("degraded", stage="asr", reason=reason, fallback="typed_input")
         await say(session, deps["tts"], "I'm having trouble hearing you. You can type your question instead.")
 
-    async def turn(text: str, timer: TurnTimer) -> None:
-        await Turn(session, deps["retriever"], deps["llm"], deps.get("tts"), timer).run(text, prefetch)
+    def turn(text: str, timer: TurnTimer) -> None:
+        nonlocal turn_task
+        if turn_task and not turn_task.done():
+            turn_task.cancel()
+        turn_task = asyncio.create_task(
+            Turn(session, deps["retriever"], deps["llm"], deps.get("tts"), timer).run(text, prefetch))
+
+    async def barge_in() -> None:
+        """Speech while we're answering: stop talking. Coarse — the client
+        drops queued audio, so the cut can land mid-syllable."""
+        if turn_task and not turn_task.done():
+            turn_task.cancel()
+            await session.emit("interrupted")
 
     try:
         while True:
@@ -88,7 +100,7 @@ async def ws_endpoint(ws: WebSocket) -> None:
                     recorder.text(text)
                 if text:
                     await session.emit("final_transcript", text=text, source="typed")
-                    await turn(text, TurnTimer())
+                    turn(text, TurnTimer())
             elif msg["type"] == "audio":
                 pcm = msg["pcm"]
                 if recorder:
@@ -96,7 +108,9 @@ async def ws_endpoint(ws: WebSocket) -> None:
                 if not session.asr_ok():
                     continue
                 signal = utt.push(pcm)
-                if signal is Signal.PARTIAL_DUE and (partial_task is None or partial_task.done()):
+                if signal is Signal.SPEECH_START:
+                    await barge_in()
+                elif signal is Signal.PARTIAL_DUE and (partial_task is None or partial_task.done()):
                     partial_task = asyncio.create_task(partial(utt.audio()))
                 elif signal is Signal.END:
                     timer = TurnTimer(speech_end=time.perf_counter())
@@ -111,11 +125,13 @@ async def ws_endpoint(ws: WebSocket) -> None:
                     utt.reset()
                     await session.emit("final_transcript", text=text)
                     if text:
-                        await turn(text, timer)
+                        turn(text, timer)
             elif msg["type"] == "end_session":
                 break
     except WebSocketDisconnect:
         pass
     finally:
+        if turn_task and not turn_task.done():
+            turn_task.cancel()
         if recorder:
             recorder.close()
