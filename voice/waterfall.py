@@ -48,6 +48,13 @@ def main() -> None:
         draw(t, scale)
 
     if args.stats:
+        fa = [t["marks"]["first_audio"] for t in turns if "first_audio" in t["marks"]]
+        # p95 first: that's the number a person forms an opinion from
+        if fa:
+            print(f"\nfirst audio  p95 {pct(fa, .95):.0f} ms   p50 {pct(fa, .5):.0f} ms   ({len(fa)} turns)")
+        reused = [t.get("retrieval_reused") for t in turns if "retrieval_reused" in t]
+        if reused:
+            print(f"retrieval reused from partial: {sum(map(bool, reused)) / len(reused):.0%}")
         print(f"\n{len(turns)} turns")
         print(f"  {'stage':<14}{'p50':>8}{'p95':>8}   (duration ms)")
         for name in ORDER:
