@@ -18,7 +18,7 @@ PARTIAL_EVERY_MS = int(env("PARTIAL_EVERY_MS", "400"))
 # Primary model. Point LLM_URL at a bigger GPU box if you have one; the
 # fallback stays on this machine so it can't fail for the same reason.
 LLM_URL = env("LLM_URL", "http://localhost:11434")
-LLM_MODEL = env("LLM_MODEL", "qwen3:4b")
+LLM_MODEL = env("LLM_MODEL", "qwen3:4b-instruct")
 FALLBACK_URL = env("FALLBACK_URL", "http://localhost:11434")
 FALLBACK_MODEL = env("FALLBACK_MODEL", "llama3.2:3b")
 

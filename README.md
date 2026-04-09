@@ -13,7 +13,7 @@ speaking" goes) and **what happens when a component fails** (never silence).
 | VAD | webrtcvad, 240 ms of silence ends an utterance |
 | ASR | faster-whisper `base.en`, partials by re-transcribing the buffer every 400 ms |
 | Retrieval | [rag-grounded](https://github.com/ahsaan-habib/rag-grounded) hybrid BM25 + dense, RRF, cross-encoder rerank |
-| LLM | Ollama `qwen3:4b` (primary), `llama3.2:3b` (fallback) |
+| LLM | Ollama `qwen3:4b-instruct` (primary), `llama3.2:3b` (fallback) |
 | TTS | Piper `en_US-lessac-medium` |
 
 ## Protocol
