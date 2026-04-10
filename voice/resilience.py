@@ -57,6 +57,12 @@ class ResilientLLM:
             # mid-answer failure: don't restart the answer from the top
             yield " Sorry, I lost my train of thought there."
             return
-        async for token in _with_deadlines(self.fallback.stream(query, chunks),
-                                           config.LLM_FIRST_TOKEN_S, config.LLM_STALL_S):
-            yield token
+        try:
+            async for token in _with_deadlines(self.fallback.stream(query, chunks),
+                                               config.LLM_FIRST_TOKEN_S, config.LLM_STALL_S):
+                yield token
+        except (asyncio.TimeoutError, httpx.HTTPError) as e:
+            # both down: say so and end the turn, rather than leave the client waiting
+            log.warning("llm.fallback_failed reason=%s", type(e).__name__)
+            await emit("degraded", stage="llm_fallback", reason=type(e).__name__)
+            yield " Sorry, I can't answer right now. Please try again in a moment."

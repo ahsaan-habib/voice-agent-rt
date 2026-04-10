@@ -40,7 +40,9 @@ def main() -> None:
     ap.add_argument("--stats", action="store_true")
     args = ap.parse_args()
 
-    turns = [json.loads(l) for l in TURNS_LOG.read_text().splitlines() if l.strip()]
+    turns = [json.loads(l) for l in TURNS_LOG.read_text().splitlines() if l.strip()] if TURNS_LOG.exists() else []
+    if not turns:
+        raise SystemExit(f"no turns in {TURNS_LOG} yet: talk to the agent first")
     shown = turns if args.all else turns[-args.n:]
     scale = max((t["marks"].get("first_audio") or max((s[1] or s[0]) for s in t["spans"].values()))
                 for t in shown) or 1

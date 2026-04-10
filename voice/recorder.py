@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import time
 import uuid
 from pathlib import Path
@@ -21,7 +22,10 @@ ENABLED = os.environ.get("VOICE_RECORD", "1") == "1"
 
 class Recorder:
     def __init__(self, session_id: str | None = None):
-        self.id = session_id or time.strftime("%Y%m%d-%H%M%S-") + uuid.uuid4().hex[:6]
+        # the id comes from the client's query string and becomes a directory
+        # name, so nothing but [A-Za-z0-9_-] gets through ("../../etc" -> "etc")
+        safe = re.sub(r"[^A-Za-z0-9_-]", "", session_id or "")[:80]
+        self.id = safe or time.strftime("%Y%m%d-%H%M%S-") + uuid.uuid4().hex[:6]
         self.dir = RECORDINGS / self.id
         self.dir.mkdir(parents=True, exist_ok=True)
         self.t0 = time.perf_counter()
