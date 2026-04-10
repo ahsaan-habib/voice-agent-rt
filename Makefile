@@ -1,4 +1,4 @@
-.PHONY: install models serve waterfall replay
+.PHONY: install models serve waterfall replay test
 
 install:
 	python -m venv .venv && .venv/bin/pip install -e .
@@ -16,3 +16,6 @@ waterfall:
 
 replay:
 	python -m voice.replay recordings/ --speed 2
+
+test:
+	pytest -q

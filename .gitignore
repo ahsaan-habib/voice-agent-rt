@@ -7,3 +7,4 @@ voices/
 recordings/
 turns.jsonl
 .chroma/
+.pytest_cache/
