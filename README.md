@@ -102,3 +102,11 @@ drops queued audio, which can clip a syllable, and it relies on the browser's
 echo cancellation not to trigger on the agent's own voice. One language,
 quiet room. Single session — the warm reranker is shared and nothing here has been
 measured under concurrency.
+
+## License
+
+MIT (see `LICENSE`) for the code in this repo. Speech synthesis comes from
+[piper-tts](https://github.com/OHF-Voice/piper1-gpl), a dependency licensed
+GPL-3.0: a product that ships the two together falls under the GPL. Downloaded
+voices have their own licences; check the voice's model card before using it
+commercially.
